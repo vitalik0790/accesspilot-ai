@@ -1,7 +1,9 @@
 import { afterEach, expect, it, vi } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { App } from '../src/popup/App';
+import { speak, stopSpeech } from '../src/services/speech';
+vi.mock('../src/services/speech', () => ({ speak: vi.fn(), stopSpeech: vi.fn() }));
 afterEach(() => vi.unstubAllGlobals());
 it('supports keyboard activation and requires consent before AI actions', async () => {
   const sendMessage = vi.fn().mockResolvedValue({ ok: true, title: 'Example', issues: [], truncated: false });
@@ -27,4 +29,50 @@ it('announces request errors accessibly', async () => {
   render(<App />);
   await userEvent.click(screen.getByRole('button', { name: 'Check accessibility locally' }));
   expect(await screen.findByRole('alert')).toHaveTextContent('Page unavailable');
+});
+it('keeps focus during loading, prevents duplicate requests, and exposes a results link', async () => {
+  let resolve!: (value: unknown) => void;
+  const sendMessage = vi.fn(() => new Promise(done => { resolve = done; }));
+  vi.stubGlobal('chrome', { runtime: { sendMessage } });
+  render(<App />);
+  const user = userEvent.setup();
+  await user.tab();
+  await user.keyboard('{Enter}');
+  expect(screen.getByRole('status')).toHaveTextContent('Checking this page locally');
+  expect(screen.getByRole('button', { name: 'Check accessibility locally' })).toHaveFocus();
+  await user.keyboard('{Enter}');
+  expect(sendMessage).toHaveBeenCalledTimes(1);
+  await act(async () => resolve({ ok: true, title: 'Results', issues: [], truncated: false }));
+  expect(screen.getByRole('status')).toHaveTextContent('0 potential issues found');
+  expect(screen.getByRole('link', { name: 'Go to results' })).toHaveAttribute('href', '#result-heading');
+  expect(screen.getByRole('heading', { name: 'Results' })).toHaveAttribute('tabindex', '-1');
+});
+it('uses the current opt-in speech preference when a pending answer arrives', async () => {
+  let resolve!: (value: unknown) => void;
+  vi.stubGlobal('chrome', { runtime: { sendMessage: vi.fn(() => new Promise(done => { resolve = done; })) } });
+  render(<App />);
+  const user = userEvent.setup();
+  const autoRead = screen.getByLabelText('Read new AI responses automatically');
+  expect(autoRead).not.toBeChecked();
+  await user.click(autoRead);
+  await user.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await user.click(screen.getByRole('button', { name: 'Summarize page' }));
+  await user.click(autoRead);
+  expect(stopSpeech).toHaveBeenCalled();
+  await act(async () => resolve({ ok: true, title: 'Page', issues: [], truncated: false, answer: 'Answer' }));
+  expect(speak).not.toHaveBeenCalled();
+  await user.click(screen.getByRole('button', { name: 'Read response' }));
+  expect(speak).toHaveBeenCalledWith('Answer', expect.any(Function));
+});
+it('does not start speech after the popup unmounts', async () => {
+  let resolve!: (value: unknown) => void;
+  vi.mocked(speak).mockClear();
+  vi.stubGlobal('chrome', { runtime: { sendMessage: vi.fn(() => new Promise(done => { resolve = done; })) } });
+  const { unmount } = render(<App />);
+  await userEvent.click(screen.getByLabelText('Read new AI responses automatically'));
+  await userEvent.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await userEvent.click(screen.getByRole('button', { name: 'Summarize page' }));
+  unmount();
+  await act(async () => resolve({ ok: true, title: 'Page', issues: [], truncated: false, answer: 'Answer' }));
+  expect(speak).not.toHaveBeenCalled();
 });

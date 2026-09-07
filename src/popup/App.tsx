@@ -11,9 +11,12 @@ export function App() {
   const [error, setError] = useState('');
   const [result, setResult] = useState<Extract<Response, { ok: true }> | null>(null);
   const locked = useRef(false);
+  const autoReadRef = useRef(false);
+  const mounted = useRef(true);
   useEffect(() => {
+    mounted.current = true;
     window.addEventListener('pagehide', stopSpeech);
-    return () => { stopSpeech(); window.removeEventListener('pagehide', stopSpeech); };
+    return () => { mounted.current = false; stopSpeech(); window.removeEventListener('pagehide', stopSpeech); };
   }, []);
   async function run(request: Request) {
     if (locked.current) return;
@@ -22,11 +25,12 @@ export function App() {
     setStatus(request.type === 'scan' ? 'Checking this page locally…' : 'Reading this page and asking OpenAI…');
     try {
       const response: Response = await chrome.runtime.sendMessage(request);
+      if (!mounted.current) return;
       if (!response) throw new Error('The extension did not respond. Reload it and try again.');
       if (!response.ok) throw new Error(response.error);
       setResult(response);
-      setStatus(response.answer ? 'AI response ready.' : `Check complete. ${response.issues.length} potential issues found.`);
-      if (autoRead && response.answer) speak(response.answer, setError);
+      setStatus(`${response.answer ? 'AI response ready.' : 'Check complete.'} ${response.issues.length} potential issues found. Use Go to results to review.`);
+      if (autoReadRef.current && response.answer) speak(response.answer, setError);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Could not contact the extension.');
       setStatus('Request failed. You can try again.');
@@ -41,7 +45,7 @@ export function App() {
     <section aria-labelledby="page-actions">
       <h2 id="page-actions">Explore this page</h2>
       <button aria-disabled={busy} onClick={() => void run({ type: 'scan' })}>Check accessibility locally</button>
-      <p id="privacy">AI actions send the page title, up to 16,000 characters of page text, and your question to OpenAI. Visible text may contain personal information. Form values are excluded. Local checks send nothing.</p>
+      <p id="privacy">AI actions send the page title, up to 16,000 characters of page text, up to 40 short structure cues (such as headings and labels), and your question to OpenAI. Page text and labels may contain personal information. Form values are excluded. Local checks send nothing.</p>
       <label className="check"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} aria-describedby="privacy" />Allow sending this page to OpenAI</label>
       <button className="primary" disabled={!consent} aria-disabled={busy || !consent} onClick={() => { if (consent) void run({ type: 'summarize', consent: true }); }}>Summarize page</button>
       <form onSubmit={ask}>
@@ -52,14 +56,19 @@ export function App() {
       </form>
     </section>
     <section aria-labelledby="speech-heading"><h2 id="speech-heading">Read aloud</h2>
-      <label className="check"><input type="checkbox" checked={autoRead} onChange={event => setAutoRead(event.target.checked)} />Read new AI responses automatically</label>
+      <label className="check"><input type="checkbox" checked={autoRead} onChange={event => {
+        autoReadRef.current = event.target.checked;
+        setAutoRead(event.target.checked);
+        if (!event.target.checked) stopSpeech();
+      }} />Read new AI responses automatically</label>
       <div className="actions"><button disabled={!result?.answer} onClick={() => { if (result?.answer) speak(result.answer, setError); }}>Read response</button><button onClick={stopSpeech}>Stop reading</button></div>
       <p>Keep this popup open while listening.</p>
     </section>
     <p role="status" aria-atomic="true">{status}</p>
+    {result && <a href="#result-heading">Go to results</a>}
     {error && <p role="alert" className="error">{error}</p>}
-    {result && <section aria-labelledby="result-heading"><h2 id="result-heading">{result.title || 'Page results'}</h2>
-      {result.truncated && <p>Only the first part of this page was included.</p>}
+    {result && <section aria-labelledby="result-heading"><h2 id="result-heading" tabIndex={-1}>{result.title || 'Page results'}</h2>
+      {result.truncated && <p>Some page text or structure cues were omitted to keep the request short.</p>}
       {result.answer && <><h3>AI response</h3><p className="answer">{result.answer}</p><p>AI can make mistakes. Check important details on the page.</p></>}
       <h3>Accessibility check</h3>
       <p>{result.issues.length} potential issues. These basic checks are not a complete accessibility audit.</p>

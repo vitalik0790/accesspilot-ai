@@ -38,4 +38,40 @@ describe('page extraction and accessibility analysis', () => {
     expect(page.text).toHaveLength(16000);
     expect(page.truncated).toBe(true);
   });
+  it('keeps hidden and editable descendants out of all names and structure cues', () => {
+    document.body.innerHTML = `<main><h1>Overview<span hidden>hidden-secret</span></h1>
+      <label>Message<textarea>draft-secret</textarea></label>
+      <button>Save<span aria-hidden="true">aria-secret</span><span contenteditable>edit-secret</span></button>
+      <button><img hidden alt="image-secret"></button>
+      <span id="hidden-label" hidden>reference-secret</span><input aria-labelledby="hidden-label">
+      <input type="password" value="password-secret"><input type="button" value="value-secret">
+      <div role="textbox">widget-secret</div><div contenteditable><button aria-label="editable-secret"></button></div>
+      <details><summary>More</summary><p>collapsed-secret</p></details>
+      <p style="opacity:0">transparent-secret</p></main>`;
+    const page = extractPage();
+    expect(JSON.stringify(page)).not.toContain('-secret');
+    expect(page.fields[0].name).toBe('Message');
+    expect(page.buttons[0].name).toBe('Save');
+    expect(page.structure).toContainEqual({ kind: 'heading', name: 'Overview' });
+    expect(page.text).toContain('More');
+  });
+  it('includes compact structure without URLs, raw markup, or input values', () => {
+    document.body.innerHTML = `<main><h1>Guide</h1><a href="https://example.com/?token=secret">Read guide</a>
+      <button aria-label="Close"></button><label for="email">Email</label><input id="email" value="private">
+      <img src="private-url" alt="A tree"></main>`;
+    const page = extractPage();
+    expect(page.structure).toEqual([
+      { kind: 'landmark', name: 'main' }, { kind: 'heading', name: 'Guide' },
+      { kind: 'link', name: 'Read guide' }, { kind: 'button', name: 'Close' },
+      { kind: 'form-label', name: 'Email' }, { kind: 'image', name: 'A tree' },
+    ]);
+    expect(JSON.stringify(page)).not.toMatch(/private|token=|<main>/);
+  });
+  it('bounds structure cues and indicates when more are omitted', () => {
+    document.body.innerHTML = Array.from({ length: 42 }, () => `<h2>${'a'.repeat(300)}</h2>`).join('');
+    const page = extractPage();
+    expect(page.structure).toHaveLength(40);
+    expect(page.structure.every(item => item.name.length <= 160)).toBe(true);
+    expect(page.truncated).toBe(true);
+  });
 });

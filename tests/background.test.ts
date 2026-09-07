@@ -5,7 +5,7 @@ vi.mock('../src/services/ai', () => ({ askAI: vi.fn().mockResolvedValue('Summary
 const config = { apiKey: '', model: 'test' };
 beforeEach(() => { vi.mocked(askAI).mockResolvedValue('Summary'); });
 function mockChrome(url = 'https://example.com') {
-  const executeScript = vi.fn().mockResolvedValue([{ result: { title: 'Example', text: 'Text', truncated: false, images: [{ hasAlt: false }], buttons: [], fields: [] } }]);
+  const executeScript = vi.fn().mockResolvedValue([{ result: { title: 'Example', text: 'Text', truncated: false, structure: [], images: [{ hasAlt: false }], buttons: [], fields: [] } }]);
   vi.stubGlobal('chrome', { tabs: { query: vi.fn().mockResolvedValue([{ id: 1, url }]) }, scripting: { executeScript } });
   return executeScript;
 }

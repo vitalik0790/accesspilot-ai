@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { askAI } from '../src/services/ai';
 import type { PageSnapshot } from '../src/shared/types';
-const page: PageSnapshot = { title: 'Example', text: 'Page facts', truncated: false, images: [], buttons: [], fields: [] };
+const page: PageSnapshot = { title: 'Example', text: 'Page facts', truncated: false, structure: [{ kind: 'heading', name: 'Overview' }], images: [], buttons: [], fields: [] };
 const config = { apiKey: 'test-placeholder', model: 'test-model' };
 afterEach(() => vi.unstubAllGlobals());
 describe('AI service', () => {
@@ -16,7 +16,7 @@ describe('AI service', () => {
     const body = JSON.parse(options.body);
     expect(body.store).toBe(false);
     expect(body.instructions).toContain('untrusted');
-    expect(JSON.parse(body.input)).toEqual({ task: 'What is this?', page: { title: 'Example', text: 'Page facts', truncated: false } });
+    expect(JSON.parse(body.input)).toEqual({ task: 'What is this?', page: { title: 'Example', text: 'Page facts', truncated: false, structure: [{ kind: 'heading', name: 'Overview' }] } });
   });
   it('fails before network access when key or content is missing', async () => {
     const fetchMock = vi.fn(); vi.stubGlobal('fetch', fetchMock);
