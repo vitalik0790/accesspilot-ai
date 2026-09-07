@@ -1,0 +1,53 @@
+# Dependencies, generated builds, and extension packages
+node_modules/
+.pnpm-store/
+dist/
+build/
+coverage/
+*.tsbuildinfo
+*.crx
+*.zip
+*.map
+
+# Environment configuration: only the root, empty-key template is public
+.env
+.env.*
+*.env
+*.env.*
+!/.env.example
+.envrc
+*.local
+
+# Credentials and local package-manager authentication
+.npmrc
+.yarnrc.yml
+credentials.json
+secrets.json
+secrets/
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+
+# Caches, logs, test output, and temporary files
+.vite/
+.vitest/
+.cache/
+test-results/
+playwright-report/
+*.log
+*.tmp
+*.bak
+*.swp
+*~
+
+# Machine-specific editor, agent, and operating-system files
+.idea/
+.vscode/
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
+Desktop.ini

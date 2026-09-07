@@ -1,0 +1,30 @@
+import { afterEach, expect, it, vi } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { App } from '../src/popup/App';
+afterEach(() => vi.unstubAllGlobals());
+it('supports keyboard activation and requires consent before AI actions', async () => {
+  const sendMessage = vi.fn().mockResolvedValue({ ok: true, title: 'Example', issues: [], truncated: false });
+  vi.stubGlobal('chrome', { runtime: { sendMessage } });
+  const user = userEvent.setup();
+  render(<App />);
+  expect(screen.getByRole('button', { name: 'Summarize page' })).toBeDisabled();
+  await user.tab();
+  expect(screen.getByRole('button', { name: 'Check accessibility locally' })).toHaveFocus();
+  await user.keyboard('{Enter}');
+  await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'scan' }));
+  await user.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  sendMessage.mockResolvedValue({ ok: true, title: 'Example', issues: [], truncated: false, answer: 'Useful summary.' });
+  await user.click(screen.getByRole('button', { name: 'Summarize page' }));
+  expect(await screen.findByText('Useful summary.')).toBeInTheDocument();
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'summarize', consent: true });
+  await user.type(screen.getByLabelText('Ask about this page'), 'What matters?');
+  await user.click(screen.getByRole('button', { name: 'Ask question' }));
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'ask', question: 'What matters?', consent: true });
+});
+it('announces request errors accessibly', async () => {
+  vi.stubGlobal('chrome', { runtime: { sendMessage: vi.fn().mockResolvedValue({ ok: false, error: 'Page unavailable' }) } });
+  render(<App />);
+  await userEvent.click(screen.getByRole('button', { name: 'Check accessibility locally' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('Page unavailable');
+});

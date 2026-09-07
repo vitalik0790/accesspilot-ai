@@ -1,0 +1,29 @@
+:root { font-family: system-ui, sans-serif; color: #172b38; background: #f6f8f8; font-size: 16px; line-height: 1.5; color-scheme: light; }
+* { box-sizing: border-box; }
+body { margin: 0; width: 390px; max-width: 100vw; }
+main { padding: 20px; }
+header { margin-bottom: 24px; }
+h1 { font-size: 1.75rem; margin: 0 0 6px; letter-spacing: -.04em; }
+h2 { font-size: 1.15rem; margin: 0 0 12px; }
+h3 { font-size: 1rem; }
+p { margin: 10px 0; }
+.eyebrow { color: #235b55; font-size: .75rem; font-weight: 700; letter-spacing: .08em; }
+section { background: white; border: 1px solid #bdcdcc; border-radius: 10px; padding: 16px; margin: 16px 0; }
+button, textarea, input { font: inherit; }
+button { min-height: 44px; border: 1px solid #42645f; border-radius: 6px; padding: 9px 12px; background: #fff; color: #183e38; cursor: pointer; }
+button:hover { background: #e7f2ef; }
+button.primary { color: white; background: #18574c; width: 100%; }
+button:disabled, button[aria-disabled="true"] { opacity: .6; cursor: default; }
+:focus-visible { outline: 3px solid #164ac6; outline-offset: 3px; }
+label { display: block; font-weight: 600; }
+.check { display: flex; align-items: flex-start; gap: 10px; margin: 16px 0; font-weight: 400; }
+input[type="checkbox"] { width: 20px; height: 20px; flex-shrink: 0; margin-top: 3px; accent-color: #18574c; }
+form { margin-top: 20px; }
+textarea { width: 100%; margin-top: 8px; padding: 10px; resize: vertical; border: 1px solid #647871; border-radius: 6px; }
+#privacy, #question-help, footer { font-size: .875rem; }
+.actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.answer { white-space: pre-wrap; overflow-wrap: anywhere; }
+.error { color: #861d21; border-left: 4px solid #861d21; padding: 10px; }
+li { margin-bottom: 10px; }
+footer { padding-bottom: 8px; }
+@media (forced-colors: active) { button { border: 2px solid ButtonText; } :focus-visible { outline-color: Highlight; } }
