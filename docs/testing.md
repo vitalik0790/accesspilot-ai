@@ -13,6 +13,25 @@ Run `pnpm test`, `pnpm typecheck`, and `pnpm build`. Unit tests mock Chrome and 
 - The built popup had no horizontal overflow at 390 and 195 CSS-pixel viewport widths with a long synthetic page title. The narrow view was visually inspected. This approximates reduced space at enlarged zoom; it does not verify actual Chrome extension-popup zoom behavior.
 - Actual extension installation, live API responses, OS speech, 200% popup zoom, and screen-reader/user testing remain unverified. The temporary harness and screenshot are local ignored `.cache` artifacts, not shipped tests.
 
+### Popup sizing regression
+
+A user reported continuous flickering and a narrow, clipped popup until clicking inside it. The popup previously constrained its body width to `100vw`, coupling content size to Chrome's automatic popup viewport sizing. The root document now supplies a viewport-independent 390px width and reserves the vertical scrollbar. The earlier 195px ordinary-page reflow check does not validate this sizing contract: the actual extension popup must establish its own width.
+
+After rebuilding and reloading the extension, open it repeatedly using both the toolbar and shortcut without clicking inside. Confirm that width stays stable immediately, scrolling works, and no flicker occurs. Repeat at 200% popup zoom and with a screen reader. The CSS addresses a suspected sizing feedback loop; confirmation on the affected Chrome installation is still required.
+
+The user subsequently confirmed that the flicker disappeared after reloading the corrected build. Screen-reader and 200% zoom checks remain separate.
+
+## v0.2 focus navigation
+
+Automated validation: 53 tests across seven Vitest files passed, along with TypeScript checks and the production build. An isolated headless Chrome harness exercised the built, detached content functions with synthetic HTTP-page content and mocked Chrome messaging/AI. Native and custom focus, scrolling, stale removal rejection, temporary tabindex restoration, exclusion of form values, and absence of click/submit/extra AI calls passed. No paid API calls were made by these checks. Actual extension-popup handoff and screen-reader announcements still require manual validation below.
+
+- On a synthetic/public page, ask where a named button, link, or search field is. Verify that only a relevant enabled suggestion offers **Move focus to [name]**. An answer without a target should still display and read normally.
+- Tab to the offered button and activate it with Enter/Space. The popup should close, the page should scroll to the control, and NVDA/Chrome should announce its name and role. Tab/Shift+Tab should continue normal page navigation. No link should open and no form should submit.
+- Remove, replace, hide, rename, or disable the target before activating the button. Also test a changed tab/URL, page reload, new snapshot, five-minute expiry, and service-worker restart. Expect an accessible error and a new-question instruction, never a different target.
+- Test custom role widgets without tabindex and existing negative tabindex values. Temporary tabindex must be removed on blur without creating a keyboard trap.
+- Inspect a Q&A network request using non-sensitive fixtures: interactive entries contain only ID, role, name, and disabled state. There must be no input values, password controls, raw HTML, actual DOM IDs/selectors, or hrefs. The follow-up focus request must make no AI call.
+- Test actual page-focus handoff and screen-reader announcements in the installed extension; DOM unit tests cannot certify browser-window focus behavior.
+
 ## Keyboard and screen reader
 
 - Open the popup using its shortcut (configure it in Chrome if intercepted).

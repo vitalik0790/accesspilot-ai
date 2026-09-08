@@ -18,14 +18,27 @@ Many websites can still be difficult to understand or navigate with assistive te
 - Local checks for missing image alt attributes, unnamed buttons, and unlabeled native form fields; no API key needed for these checks.
 - A React popup with native keyboard controls, visible focus, loading/error/result status announcements, and a link to results.
 - A bounded representation of page text and short headings, landmarks, links/buttons, labels, and image alt text. No raw DOM is sent to the model.
+- v0.2 interactive-element discovery and explicit focus navigation from Q&A suggestions. The extension scrolls and focuses only after you activate the offered button.
 
-The MVP does not perform page actions, accept voice commands, analyze image pixels, or navigate semantically. Chrome protected pages, iframe/shadow DOM content, and unloaded content are outside its current extraction scope. Keyboard behavior has automated coverage; real screen-reader and Chrome popup testing remains required.
+The MVP does not click, submit forms, accept voice commands, or analyze image pixels. Chrome protected pages, iframe/shadow DOM content, and unloaded content are outside its current extraction scope. Keyboard behavior has automated coverage; real screen-reader and Chrome popup testing remains required.
+
+## Element discovery and focus navigation (v0.2)
+
+Ask a question such as **How can I schedule a service?**, **Where is checkout?**, or **Find the search field**. Q&A includes up to 100 visible native buttons, links, form controls, and supported ARIA widgets in document order. Each record contains a temporary ID, role, name (up to 160 characters), and disabled state. Names use associated labels, ARIA names, safe text, image alt text, or title fallback; entered values and password controls are excluded. Unnamed controls may be recorded but cannot be offered as focus targets.
+
+The model returns a structured answer and an optional target ID. Only a named, enabled ID present in that snapshot can produce **Move focus to [element name]**. Use Tab to reach this native button and Enter or Space to activate it. The extension scrolls the original element into view, focuses it, stops its own speech, and closes the popup so your screen reader can announce the page control naturally. Use normal keyboard navigation afterward.
+
+**Focus does not mean activation.** AccessPilot does not call click, submit, or execute selectors/JavaScript supplied by the model. You decide whether to activate the control yourself. This avoids treating an AI suggestion as permission to submit information, purchase something, or navigate away. However, websites can run their own code in response to focus or scrolling; those handlers are outside the extension's control.
+
+The content script keeps an isolated in-memory map from snapshot IDs to actual element references; IDs are not written into the page DOM. The worker validates the offered ID, active tab, URL, and original Chrome document ID. The content script rechecks visibility, disabled state, name, role, input type, connection, and link destination. Removed/replaced controls, a new snapshot, changed page, five-minute expiry, or lost service-worker state require asking again. A failure is announced in the popup instead of choosing another element.
+
+This is bounded, heuristic discovery, not a complete accessible-name or focus-navigation engine. Duplicate names can be ambiguous; later elements may be omitted; custom widgets may reject focus or redirect it. Hidden referenced labels and editable regions remain conservatively excluded. Some custom controls temporarily receive `tabindex="-1"`, restored on blur without creating a new tab stop. Live testing with Chrome and screen readers is still required. Q&A requires a model supporting the Responses API's structured JSON output; summaries remain plain text.
 
 ## Roadmap
 
 These are proposed directions, not release dates or commitments. Later features require privacy and accessibility review.
 
-### v0.1 — current MVP
+### v0.1 — implemented foundation
 
 - Page summarization
 - Questions about the current page
@@ -33,11 +46,11 @@ These are proposed directions, not release dates or commitments. Later features 
 - Basic local accessibility checks
 - Keyboard-accessible UI
 
-### v0.2 — planned
+### v0.2 — current iteration
 
-- Voice commands
-- Semantic page navigation
-- Improved page structure understanding
+- Interactive element discovery with bounded names, roles, disabled states, and snapshot IDs
+- Optional AI target suggestions with validated, user-triggered focus navigation
+- No automatic clicks or submissions
 
 ### v0.3 — planned
 
@@ -47,6 +60,7 @@ These are proposed directions, not release dates or commitments. Later features 
 
 ### Future
 
+- Voice commands and broader semantic page navigation
 - Secure backend for AI requests
 - Human confirmation before sensitive AI actions
 - Observability and cost controls
@@ -90,6 +104,7 @@ React popup ← typed result ← service worker
 public/manifest.json       Manifest V3 and minimal permissions
 src/popup/                Semantic React UI and styles
 src/content/extract.ts     On-demand content script function
+src/content/focus.ts       Validated, focus-only content script function
 src/background/           Sender validation and orchestration
 src/services/ai.ts         OpenAI network boundary
 src/services/speech.ts     SpeechSynthesis controls
@@ -105,7 +120,7 @@ The content script is a self-contained function injected with `chrome.scripting.
 | Manifest entry | Purpose |
 | --- | --- |
 | `activeTab` | Temporary access to the page after the user invokes the extension; used to identify and read that tab. Avoids ongoing access to browsing history or all sites. |
-| `scripting` | Injects the DOM extraction function into that tab only when an action is requested. |
+| `scripting` | Injects DOM extraction and validated focus functions into the authorized tab only on a user action. |
 | `https://api.openai.com/*` host permission | Allows the service worker to call the OpenAI API. Chrome host permission paths cover the host; code calls only `/v1/responses`. |
 
 No `tabs`, `storage`, microphone, clipboard, or `<all_urls>` permission is requested. SpeechSynthesis needs no microphone permission. The manifest also declares a popup shortcut and a Content Security Policy restricting scripts to packaged files and connections to OpenAI.
@@ -114,6 +129,7 @@ No `tabs`, `storage`, microphone, clipboard, or `<all_urls>` permission is reque
 
 - Nothing is extracted until you activate a page action. Local scans make no network calls.
 - AI requests send the page title (up to 300 characters), at most 16,000 characters of text, up to 40 structure cues of 160 characters each, truncation status, and the question. URL attributes, raw HTML, form values, editable regions, scripts, styles, and content detected as hidden are excluded. URLs or sensitive information written in ordinary page text or labels may still be included; exclusion is not a complete redaction system.
+- Q&A additionally sends up to 100 compact interactive-element records (`id`, `role`, `name`, `disabled`). Snapshot UUIDs, live element references, and link destinations used for local validation are not sent. Focus navigation makes no AI request and uses no additional permissions.
 - No page content, consent, questions, or answers are saved to extension storage. Consent resets when the popup closes. There is no analytics or telemetry. A request already sent may finish after the popup closes.
 - The AI service uses `store: false`. This disables stored Responses retrieval; it is **not** a promise of zero provider retention. See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data) and the [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create).
 - Speech uses the browser/OS voices, which may use a remote speech service depending on the installed voice. Text remains available without speech.

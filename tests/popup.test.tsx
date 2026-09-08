@@ -76,3 +76,36 @@ it('does not start speech after the popup unmounts', async () => {
   await act(async () => resolve({ ok: true, title: 'Page', issues: [], truncated: false, answer: 'Answer' }));
   expect(speak).not.toHaveBeenCalled();
 });
+it('offers a keyboard focus action only after a target answer and closes on success', async () => {
+  const target = { id: 'element-1', name: 'Schedule Services', snapshotId: '00000000-0000-4000-8000-000000000001' };
+  const sendMessage = vi.fn().mockResolvedValueOnce({ ok: true, title: 'Page', issues: [], truncated: false, answer: 'Use Schedule Services.', target }).mockResolvedValueOnce({ ok: true });
+  vi.stubGlobal('chrome', { runtime: { sendMessage } });
+  const close = vi.spyOn(window, 'close').mockImplementation(() => {});
+  render(<App />);
+  const user = userEvent.setup();
+  expect(screen.queryByRole('button', { name: /Move focus to/ })).not.toBeInTheDocument();
+  await user.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await user.type(screen.getByLabelText('Ask about this page'), 'How can I schedule?');
+  await user.tab();
+  expect(screen.getByRole('button', { name: 'Ask question' })).toHaveFocus();
+  await user.keyboard('{Enter}');
+  const move = await screen.findByRole('button', { name: 'Move focus to Schedule Services' });
+  // Traverse the actual tab order from Ask through speech and results controls.
+  for (let i = 0; i < 8 && document.activeElement !== move; i++) await user.tab();
+  expect(move).toHaveFocus();
+  await user.keyboard('{Enter}');
+  expect(sendMessage).toHaveBeenLastCalledWith({ type: 'focus', snapshotId: target.snapshotId, targetId: target.id });
+  expect(close).toHaveBeenCalledOnce();
+});
+it('keeps the popup open and announces stale target errors', async () => {
+  const sendMessage = vi.fn().mockResolvedValueOnce({ ok: true, title: 'Page', issues: [], truncated: false, answer: 'Use Checkout.', target: { id: 'element-1', name: 'Checkout', snapshotId: 'snapshot' } })
+    .mockResolvedValueOnce({ ok: false, error: 'This target is no longer available. Ask again.' });
+  vi.stubGlobal('chrome', { runtime: { sendMessage } });
+  const close = vi.spyOn(window, 'close').mockImplementation(() => {});
+  render(<App />);
+  await userEvent.click(screen.getByRole('button', { name: 'Check accessibility locally' }));
+  await userEvent.click(await screen.findByRole('button', { name: 'Move focus to Checkout' }));
+  expect(await screen.findByRole('alert')).toHaveTextContent('no longer available');
+  expect(close).not.toHaveBeenCalled();
+  expect(screen.getByRole('button', { name: 'Move focus to Checkout' })).toHaveFocus();
+});

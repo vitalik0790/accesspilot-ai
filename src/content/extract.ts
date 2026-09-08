@@ -1,9 +1,17 @@
-import type { ElementInfo, PageSnapshot, PageStructureItem } from '../shared/types';
+import type { ElementInfo, PageSnapshot, PageStructureItem, InteractiveElement, ElementRegistry } from '../shared/types';
 
 /** Passed to executeScript: keep all runtime helpers inside this function. */
 export function extractPage(): PageSnapshot {
+  // getRandomValues also works on HTTP pages; randomUUID is secure-context only.
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  bytes[6] = (bytes[6] & 15) | 64;
+  bytes[8] = (bytes[8] & 63) | 128;
+  const hex = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  const snapshotId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  const registry: ElementRegistry = { snapshotId, url: location.href, expiresAt: Date.now() + 300000, targets: new Map() };
+  window.__accessPilotElements = registry;
   const limit = 16000;
-  const privateRegion = '[contenteditable]:not([contenteditable="false"]),[role="textbox"],[role="searchbox"],[role="combobox"]';
+  const privateRegion = '[contenteditable]:not([contenteditable="false"]),[role~="textbox"],[role~="searchbox"],[role~="combobox"],[role~="spinbutton"],[role~="slider"],[role~="listbox"]';
   const excludedText = `script,style,noscript,template,input,textarea,select,${privateRegion}`;
   const clean = (value: string | null) => (value || '').replace(/\s+/g, ' ').trim();
   const visible = (element: Element): boolean => {
@@ -65,9 +73,50 @@ export function extractPage(): PageSnapshot {
       tag: el.tagName.toLowerCase(), name: name(el, allowText).slice(0, 200),
       ...(el.tagName === 'IMG' ? { hasAlt: el.hasAttribute('alt') } : {}),
     }));
+  const roles = ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem', 'menuitemcheckbox', 'menuitemradio', 'textbox', 'searchbox', 'combobox', 'listbox', 'switch', 'slider', 'spinbutton'];
+  const roleOf = (el: HTMLElement): string => {
+    const explicit = clean(el.getAttribute('role')).split(' ').find(role => roles.includes(role));
+    if (explicit) return explicit;
+    if (el instanceof HTMLInputElement) {
+      if (['submit', 'reset', 'button', 'image'].includes(el.type)) return 'button';
+      if (['checkbox', 'radio'].includes(el.type)) return el.type;
+      if (el.type === 'search') return 'searchbox';
+      if (el.type === 'range') return 'slider';
+      if (el.type === 'number') return 'spinbutton';
+      return 'textbox';
+    }
+    if (el instanceof HTMLSelectElement) return el.multiple || el.size > 1 ? 'listbox' : 'combobox';
+    if (el instanceof HTMLTextAreaElement) return 'textbox';
+    return el.tagName === 'A' ? 'link' : 'button';
+  };
+  const disabled = (el: HTMLElement) => el.matches(':disabled') || !!el.closest('[aria-disabled="true"]');
+  const eligible = (el: HTMLElement): boolean => visible(el) &&
+    !el.closest('[contenteditable]:not([contenteditable="false"])') &&
+    !el.parentElement?.closest(privateRegion) &&
+    !(el instanceof HTMLInputElement && ['password', 'hidden'].includes(el.type));
+  const interactive: InteractiveElement[] = [];
+  const controls = `button,a[href],input,select,textarea,${roles.map(role => `[role~="${role}"]`).join(',')}`;
+  let interactiveTruncated = false;
+  for (const el of document.querySelectorAll(controls)) {
+    if (!(el instanceof HTMLElement) || !eligible(el)) continue;
+    if (interactive.length === 100) { interactiveTruncated = true; break; }
+    const role = roleOf(el);
+    // Editable widget text is excluded by readableText; only its label is used.
+    const fullName = name(el, !['textbox', 'searchbox', 'combobox', 'spinbutton', 'slider', 'listbox'].includes(role));
+    const id = `element-${interactive.length + 1}`;
+    const inputType = el instanceof HTMLInputElement ? el.type : '';
+    const destination = el.getAttribute('href');
+    interactive.push({ id, role, name: fullName.slice(0, 160), disabled: disabled(el) });
+    registry.targets.set(id, { element: el, isCurrent: () =>
+      el.isConnected && eligible(el) && !disabled(el) && roleOf(el) === role &&
+      (el instanceof HTMLInputElement ? el.type : '') === inputType &&
+      el.getAttribute('href') === destination &&
+      name(el, !['textbox', 'searchbox', 'combobox', 'spinbutton', 'slider', 'listbox'].includes(role)) === fullName,
+    });
+  }
   const parts: string[] = [];
   let length = 0;
-  let truncated = false;
+  let truncated = interactiveTruncated;
   const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_TEXT);
   let node: Node | null;
   while ((node = walker.nextNode())) {
@@ -98,6 +147,7 @@ export function extractPage(): PageSnapshot {
     structure.push({ kind, name: value.slice(0, 160) });
   }
   return {
+    snapshotId, interactive,
     title: clean(document.title).slice(0, 300), text: parts.join('\n').slice(0, limit), truncated,
     structure, images: collect('img'),
     buttons: collect('button,[role="button"],input[type="button"],input[type="submit"],input[type="reset"],input[type="image"]', true),
