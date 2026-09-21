@@ -61,7 +61,7 @@ These are proposed directions, not release dates or commitments. Later features 
 ### Future
 
 - Voice commands and broader semantic page navigation
-- Secure backend for AI requests
+- Authenticated public deployment and durable usage controls
 - Human confirmation before sensitive AI actions
 - Observability and cost controls
 - User testing with blind and visually impaired users
@@ -71,71 +71,95 @@ User testing should begin during MVP evaluation rather than wait for later featu
 
 ## Quick start
 
-Requires Node.js 22 or newer and pnpm (or npm).
+Requires Node.js 22+ and pnpm. The OpenAI key now belongs **only on the backend**.
+No key is embedded in or returned to the Chrome extension.
 
 ```sh
 pnpm install
-cp .env.example .env.local
-# Edit .env.local: set OPENAI_API_KEY; optionally change OPENAI_MODEL.
 pnpm test
-pnpm build
+pnpm build          # production extension; blank backend URL leaves AI disabled
+pnpm build:server   # separate backend bundle
 ```
 
-On PowerShell, use `Copy-Item .env.example .env.local`. With npm, use `npm install`, `npm test`, and `npm run build` instead. The repository includes a pnpm lockfile for reproducible installs.
+For working local AI, follow [development setup](docs/deployment.md): configure
+`server/.env.local`, set the public loopback backend URL in the root `.env.local`,
+run `pnpm build:local`, load `dist/` in Chrome, configure its exact extension origin,
+and run `pnpm server:dev`. The local server must remain running.
 
-Open Chrome's `chrome://extensions`, enable Developer mode, choose **Load unpacked**, and select this project's `dist` folder. Open a normal webpage, then open the extension from the toolbar or with **Alt+Shift+A**. Chrome lets you change conflicting shortcuts at `chrome://extensions/shortcuts`.
+Production builds use only `ACCESSPILOT_BACKEND_URL`, an HTTPS origin. They do not
+require `OPENAI_API_KEY`. Old keyed builds should not be distributed. No server
+credentials are copied from old environment files automatically.
 
-Local accessibility checks work without a key. To summarize or ask a question, select **Allow sending this page to OpenAI** and activate the relevant button. Use Tab / Shift+Tab to move, Space to toggle checkboxes, and Enter to activate buttons. In the question field, Enter inserts a newline; Tab to **Ask question** to submit. Speech is opt-in; use **Read response**, **Stop reading**, or the automatic-reading checkbox. Keep the popup open during requests and speech.
-
-Run `pnpm dev` for rebuilds on changes. Reload the extension in Chrome after each build, and reopen the popup. Environment changes require a fresh build and extension reload.
+Open a normal webpage and use the toolbar or **Alt+Shift+A**. Local checks need no
+backend. Summary/Q&A require **Allow sending this page to AccessPilot and OpenAI**.
+Tab/Shift+Tab moves between controls; Space toggles consent; Enter activates buttons.
+Speech is optional and automatic reading defaults off. Keep the popup open during
+requests and speech. Reload the extension after rebuilding.
 
 ## Architecture
 
 ```text
-React popup → typed runtime message → service worker
-                                      ├─ executeScript(extractPage) → active tab DOM
-                                      ├─ local accessibility analyzer
-                                      └─ AI service → OpenAI Responses API
-React popup ← typed result ← service worker
-     └─ browser SpeechSynthesis
+Popup → typed worker message → filtered active-page extraction
+                            ├─ local accessibility checks
+                            └─ compact JSON → AccessPilot backend
+                                              ├─ identity / entitlements
+                                              ├─ rate and monthly usage admission
+                                              └─ OpenAI (server-only credentials)
+Popup ← answer + validated optional target ID
+  ├─ browser SpeechSynthesis
+  └─ explicit focus action → existing local snapshot/document validation
 ```
 
-```text
-public/manifest.json       Manifest V3 and minimal permissions
-src/popup/                Semantic React UI and styles
-src/content/extract.ts     On-demand content script function
-src/content/focus.ts       Validated, focus-only content script function
-src/background/           Sender validation and orchestration
-src/services/ai.ts         OpenAI network boundary
-src/services/speech.ts     SpeechSynthesis controls
-src/accessibility/        Pure accessibility checks
-src/shared/               Typed requests, results, and page snapshots
-tests/                    Vitest behavior tests
-```
+`src/services/ai.ts` is the backend client; `src/shared/api.ts` defines the versioned
+contract. `server/` contains the Node HTTP boundary, policy adapters and provider
+service. The existing `src/content`, `src/accessibility`, and speech service preserve
+v0.2 behavior. No payments or new runtime dependencies are added.
 
-The content script is a self-contained function injected with `chrome.scripting.executeScript`; no persistent content script or all-sites registration is needed. Each action takes a fresh snapshot of the active page. Questions are independent, with no conversation history. The build emits `popup.html`, `background.js`, supporting assets, and the manifest into `dist`.
+This iteration is a production **boundary**, not a public launch. The reference
+server binds only to loopback and uses an explicitly enabled local mock identity.
+Its default identity provider denies requests. Public authentication and durable,
+shared quotas must be implemented before hosting it for users.
+See [production architecture](docs/production-architecture.md) and
+[deployment requirements](docs/deployment.md).
+
+## Free and Pro preparation
+
+Both plans retain local accessibility checks, text-to-speech, focus navigation and
+limited AI summary/Q&A. Pro supports higher configurable limits. Voice navigation,
+image descriptions and advanced navigation remain future features, disabled for both
+plans today. There are no prices, subscriptions or final usage quotas in code.
+See [Free and Pro model](docs/free-pro-model.md).
 
 ## Permissions
 
 | Manifest entry | Purpose |
 | --- | --- |
-| `activeTab` | Temporary access to the page after the user invokes the extension; used to identify and read that tab. Avoids ongoing access to browsing history or all sites. |
-| `scripting` | Injects DOM extraction and validated focus functions into the authorized tab only on a user action. |
-| `https://api.openai.com/*` host permission | Allows the service worker to call the OpenAI API. Chrome host permission paths cover the host; code calls only `/v1/responses`. |
+| `activeTab` | Temporary access after invoking the extension, without ongoing all-site access. |
+| `scripting` | User-triggered extraction and validated focus in the authorized tab. |
+| Configured backend origin | AI JSON requests only; emitted at build time. Blank URL grants no network host permission. Local builds can permit loopback HTTP. |
 
-No `tabs`, `storage`, microphone, clipboard, or `<all_urls>` permission is requested. SpeechSynthesis needs no microphone permission. The manifest also declares a popup shortcut and a Content Security Policy restricting scripts to packaged files and connections to OpenAI.
+The build emits the manifest and sets its `connect-src` to the same backend origin.
+Direct OpenAI host access is removed. No `tabs`, `storage`, microphone, clipboard or
+`<all_urls>` permission is added.
 
-## Privacy and API keys
+## Privacy and credentials
 
-- Nothing is extracted until you activate a page action. Local scans make no network calls.
-- AI requests send the page title (up to 300 characters), at most 16,000 characters of text, up to 40 structure cues of 160 characters each, truncation status, and the question. URL attributes, raw HTML, form values, editable regions, scripts, styles, and content detected as hidden are excluded. URLs or sensitive information written in ordinary page text or labels may still be included; exclusion is not a complete redaction system.
-- Q&A additionally sends up to 100 compact interactive-element records (`id`, `role`, `name`, `disabled`). Snapshot UUIDs, live element references, and link destinations used for local validation are not sent. Focus navigation makes no AI request and uses no additional permissions.
-- No page content, consent, questions, or answers are saved to extension storage. Consent resets when the popup closes. There is no analytics or telemetry. A request already sent may finish after the popup closes.
-- The AI service uses `store: false`. This disables stored Responses retrieval; it is **not** a promise of zero provider retention. See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data) and the [Responses API](https://developers.openai.com/api/reference/resources/responses/methods/create).
-- Speech uses the browser/OS voices, which may use a remote speech service depending on the installed voice. Text remains available without speech.
-- `.env.local`, other environment files, and `dist` are git-ignored. **The local-development API key is embedded in the built service worker and can be recovered. Never publish or share a build containing your key.** A public production release must move the AI call and key to an authenticated backend, or implement a carefully designed user-owned credential flow. This MVP intentionally does not add a backend. Never put a developer-owned shared key in a Chrome Web Store package.
+AI actions send a filtered title, text, structure cues and question to AccessPilot,
+which forwards them to OpenAI. Q&A also includes bounded interactive IDs, roles,
+names and disabled states. No raw HTML, form values, passwords, editable regions,
+hidden content, URL attributes or live DOM references are sent. Sensitive information
+in ordinary page text or labels can still be included; filtering is not full redaction.
 
-See [Privacy](docs/privacy.md) for exact data boundaries and [Threat model](docs/threat-model.md) for current mitigations and remaining risks.
+Local checks, speech and focus require no backend request. Consent resets when the
+popup closes. Page content and answers are not persisted by the application. The
+backend logs only random request ID, status and duration, and keeps development
+usage counters in memory. Hosting logs and future persistent usage need separate
+retention controls. Browser/OS voices can use remote speech services.
+
+Server requests use `store: false`, which is not a zero-retention promise; see
+[OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+See [privacy](docs/privacy.md) for the exact transmitted fields and limitations,
+and [threat model](docs/threat-model.md) for remaining risks.
 
 ## Basic checks and limitations
 
@@ -153,9 +177,10 @@ Popup state and speech are temporary. Automatic reading defaults off to avoid co
 pnpm test       # extraction/privacy, analyzer, AI, worker flow, speech, popup keyboard
 pnpm typecheck  # standalone strict TypeScript check
 pnpm build      # strict TypeScript check and production extension build
+pnpm build:server # separate production server bundle
 ```
 
-Before release, manually load `dist` in Chrome and verify summary/Q&A with a locally configured key; local scanning on a page with known issues; protected-page and offline errors; speech start/stop; Tab/Shift+Tab without traps; 200% zoom; and NVDA or another screen reader. Automated DOM tests do not establish full assistive-technology compatibility.
+Before release, manually load `dist` in Chrome and verify summary/Q&A through the locally configured backend; local scanning on a page with known issues; protected-page and offline errors; speech start/stop; Tab/Shift+Tab without traps; 200% zoom; and NVDA or another screen reader. Automated DOM tests do not establish full assistive-technology compatibility.
 
 Use the [manual testing checklist](docs/testing.md) to record the browser, assistive technology, observed results, and unresolved issues. Do not publish page text, API keys, or personal data in test reports.
 

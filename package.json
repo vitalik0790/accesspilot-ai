@@ -5,13 +5,20 @@
   "type": "module",
   "license": "MIT",
   "scripts": {
-    "dev": "vite build --watch",
+    "dev": "vite build --mode local --watch",
     "build": "tsc --noEmit && vite build",
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "build:local": "tsc --noEmit && vite build --mode local",
+    "build:server": "tsc --noEmit && vite build --config vite.server.config.ts",
+    "server:dev": "node --env-file=server/.env.local build/server/index.js",
+    "server:start": "node build/server/index.js"
   },
-  "dependencies": { "react": "^19.1.0", "react-dom": "^19.1.0" },
+  "dependencies": {
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  },
   "devDependencies": {
     "@types/chrome": "^0.1.0",
     "@types/node": "^22.15.0",

@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { handleRequest, handleFocus, isRequest } from '../src/background/handler';
 import { askAI } from '../src/services/ai';
 vi.mock('../src/services/ai', () => ({ askAI: vi.fn() }));
-const config = { apiKey: '', model: 'test' };
+const config = { backendUrl: '' };
 const snapshotId = '00000000-0000-4000-8000-000000000001';
 const queryTabs = vi.fn();
 beforeEach(() => { vi.mocked(askAI).mockResolvedValue({ answer: 'Summary' }); });

@@ -8,8 +8,8 @@ afterEach(() => { vi.unstubAllGlobals(); vi.clearAllMocks(); });
 it('rejects webpage and foreign messages before extraction or AI work', async () => {
   const addListener = vi.fn();
   vi.stubGlobal('chrome', { runtime: { id: 'own-id', getURL: (path: string) => `chrome-extension://own-id/${path}`, onMessage: { addListener } } });
-  vi.stubGlobal('__OPENAI_API_KEY__', '');
-  vi.stubGlobal('__OPENAI_MODEL__', 'test');
+  vi.stubGlobal('__ACCESSPILOT_BACKEND_URL__', '');
+
   await import('../src/background/index');
   const listener = addListener.mock.calls[0][0];
   const respond = vi.fn();

@@ -15,7 +15,7 @@ it('supports keyboard activation and requires consent before AI actions', async 
   expect(screen.getByRole('button', { name: 'Check accessibility locally' })).toHaveFocus();
   await user.keyboard('{Enter}');
   await waitFor(() => expect(sendMessage).toHaveBeenCalledWith({ type: 'scan' }));
-  await user.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await user.click(screen.getByLabelText('Allow sending this page to AccessPilot and OpenAI'));
   sendMessage.mockResolvedValue({ ok: true, title: 'Example', issues: [], truncated: false, answer: 'Useful summary.' });
   await user.click(screen.getByRole('button', { name: 'Summarize page' }));
   expect(await screen.findByText('Useful summary.')).toBeInTheDocument();
@@ -55,7 +55,7 @@ it('uses the current opt-in speech preference when a pending answer arrives', as
   const autoRead = screen.getByLabelText('Read new AI responses automatically');
   expect(autoRead).not.toBeChecked();
   await user.click(autoRead);
-  await user.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await user.click(screen.getByLabelText('Allow sending this page to AccessPilot and OpenAI'));
   await user.click(screen.getByRole('button', { name: 'Summarize page' }));
   await user.click(autoRead);
   expect(stopSpeech).toHaveBeenCalled();
@@ -70,7 +70,7 @@ it('does not start speech after the popup unmounts', async () => {
   vi.stubGlobal('chrome', { runtime: { sendMessage: vi.fn(() => new Promise(done => { resolve = done; })) } });
   const { unmount } = render(<App />);
   await userEvent.click(screen.getByLabelText('Read new AI responses automatically'));
-  await userEvent.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await userEvent.click(screen.getByLabelText('Allow sending this page to AccessPilot and OpenAI'));
   await userEvent.click(screen.getByRole('button', { name: 'Summarize page' }));
   unmount();
   await act(async () => resolve({ ok: true, title: 'Page', issues: [], truncated: false, answer: 'Answer' }));
@@ -84,7 +84,7 @@ it('offers a keyboard focus action only after a target answer and closes on succ
   render(<App />);
   const user = userEvent.setup();
   expect(screen.queryByRole('button', { name: /Move focus to/ })).not.toBeInTheDocument();
-  await user.click(screen.getByLabelText('Allow sending this page to OpenAI'));
+  await user.click(screen.getByLabelText('Allow sending this page to AccessPilot and OpenAI'));
   await user.type(screen.getByLabelText('Ask about this page'), 'How can I schedule?');
   await user.tab();
   expect(screen.getByRole('button', { name: 'Ask question' })).toHaveFocus();

@@ -1,50 +1,76 @@
 # Privacy and data handling
 
-This document describes the current MVP, including its limits. It is not a guarantee that sensitive information will never leave the browser.
+## User action and consent
 
-## When extraction happens
+Nothing is extracted until a page action is activated. A local accessibility check sends
+no network request. Summary/Q&A require the popup checkbox allowing transmission to
+AccessPilot and OpenAI; consent resets when the popup closes. The backend also requires
+consent:true, but that field is not proof of consent from a modified client.
 
-Opening the popup alone does not extract a page. Activating **Check accessibility locally**, **Summarize page**, or **Ask question** causes the service worker to inject an extractor into the active tab's top document. Each action takes a fresh snapshot. No background browsing monitor is installed.
+## Exactly what is transmitted
 
-## Information extracted
+The extension sends the following JSON to the configured AccessPilot backend:
+version, operation (summary/question), consent, page title (300 characters), filtered
+visible text (16,000 characters), truncation flag, and up to 40 structure cues containing
+kind and name (160 characters). Kinds are heading, landmark, link, button, form-label, image.
 
-- Page title, limited to 300 characters.
-- Readable text in document order, limited to 16,000 characters. This includes surrounding navigation and footer text, not only the `main` element.
-- Up to 40 structure cues, each containing a kind and a name of at most 160 characters. These represent headings, selected landmarks, links, buttons, labels, and image alt text. They are not a full semantic tree.
-- Local analyzer records for up to 2,000 images, buttons, and native form fields per category, containing tag, a bounded name, and whether an image has an alt attribute.
-- Up to 100 interactive-element records with a temporary ID, role, name (up to 160 characters), and disabled state. Password inputs and hidden controls are omitted. Names for editable form widgets come only from labels, not entered content.
-- A flag when text, structure cues, or interactive-element counts exceed their limits. The local analyzer's element-count cap is separate and is not reported by this flag.
+Questions additionally send the question (1,000 characters) and up to 100 interactive
+records: temporary element ID, role, name (160 characters) and disabled state.
+The server forwards the page fields and question to OpenAI, with server-controlled
+instructions, model, output format and token cap. Consent/version are not forwarded.
+There is no conversation history. Backend responses contain only answer and optional
+validated target ID, or an error code.
 
-## What remains local
+Network operators necessarily process connection metadata such as IP addresses and timing.
+The application does not log these, but a hosting platform may do so.
 
-The accessibility analyzer runs in the service worker. Its element lists are not sent to OpenAI. The popup receives the page title, issue descriptions, truncation flag, and any AI response. Local scanning makes no network request. There is no extension storage, telemetry, or persisted conversation history. Popup preferences, consent, questions, and displayed answers are temporary. This does not guarantee memory erasure or prevent browser/OS diagnostics from retaining data.
+## Exclusions and limitations
 
-Focus navigation adds an isolated in-memory element registry in the current document. It retains element references and comparison data (including link destinations) until another snapshot replaces it or the document is destroyed. Authorization expires after five minutes. The worker retains at most 20 recent tab sessions with document/URL/snapshot identifiers and an offered target; suspension loses this state. It does not persist those sessions or page content to disk. The popup receives only the validated target's ID, name, and snapshot ID. Activating its focus button makes no OpenAI call, and a successful handoff closes the popup.
+The existing extractor remains unchanged. It excludes password controls, form values,
+editable regions, scripts, styles, hidden content, cookies, raw HTML/DOM, browser history,
+and unnecessary metadata. Input button values are not read. URL attributes, live element
+references, snapshot UUIDs, local accessibility findings, and local validation link
+destinations are not transmitted. There is no screenshot or image-pixel transmission.
 
-## What can be sent to OpenAI
+Sensitive information, URLs or credentials written as ordinary visible page text, headings,
+labels, alt text or in the user's question can still be sent. Filtering is heuristic,
+not general-purpose redaction. The server rejects extra JSON fields but cannot prove a
+text string was safely extracted. Avoid AI requests on sensitive pages until you have
+reviewed the content and deployment policy.
 
-Only an explicitly requested AI action sends the title, bounded text and structure cues, truncation flag, and question (up to 1,000 characters). The request also contains model configuration and fixed instructions. The API key is sent in the HTTPS Authorization header. Local analyzer records, raw HTML, and page URL attributes are not part of the AI payload.
+## Local state and navigation
 
-Q&A also sends the compact interactive records (`id`, `role`, `name`, `disabled`). Summaries do not send this additional list. A temporary ID identifies an element only within a snapshot; it is not a tracking identifier. Snapshot UUIDs and actual DOM references remain local. The optional model target is checked against the snapshot before the user is offered a focus button.
+Snapshots, consent, questions and answers are not persisted in extension storage.
+Temporary focus registries and worker sessions remain local, expire after five minutes,
+and can disappear earlier on worker suspension/new snapshots. Focus is user-triggered,
+validated, and sends no network request. No click or submit is performed; websites may
+run handlers when focused or scrolled.
 
-`store: false` is requested. This is not equivalent to zero retention: provider policies and account settings still apply. See [OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data). Requests already sent can finish after the popup closes; closing the popup is not a provider-side cancellation or deletion request.
+Speech uses browser/OS SpeechSynthesis and starts automatically only when enabled by the
+user. Installed voices may use remote speech services. Speech does not require the AI backend.
 
-## Explicit exclusions and their limits
+## Backend and provider
 
-The extractor does not read password or other input values, textarea values, select choices, cookies, browser storage, or browsing history. It skips text in native form controls, editable regions, and elements with textbox/searchbox/combobox/spinbutton/slider/listbox roles. It excludes scripts, styles, templates, and noscript content. The same text filtering applies to heading, label, and button descendants. No image pixels, screenshots, raw DOM, `href`/`src` attributes, or arbitrary metadata are sent.
+Request/response content is processed transiently in backend memory and is not written
+to application logs or a database. Application logs contain random request ID, status and
+duration only. The local usage adapter retains a user identifier, calendar month, request
+count and minute-window count in memory; restart clears this data. Real deployment will
+need persistent usage and account metadata with a documented retention/deletion policy.
 
-Content detected as hidden by `hidden`, `inert`, `aria-hidden`, CSS display/visibility, zero opacity, or closed details is skipped. This is a heuristic, not a rendering or accessibility-tree guarantee. Clipping, overlays, offscreen positioning, custom widgets, and unusual CSS can evade it. Hidden referenced labels are conservatively omitted even if they contribute to a browser accessible name.
+OpenAI requests use store:false. This is not a zero-retention guarantee; provider abuse
+monitoring and other policies can still apply. Review the current
+[OpenAI data controls](https://developers.openai.com/api/docs/guides/your-data).
+Infrastructure, proxy logs, crash dumps and backups must be reviewed independently;
+this code cannot guarantee their retention behavior.
 
-Visible text, page titles, ARIA labels, and image alt text can themselves contain passwords, personal messages, identifiers, URLs, or other sensitive information. A page can copy an entered value into an ordinary text node or label. Such data may be sent. This is **not** automatic personal-data redaction. Avoid AI actions on sensitive pages and use local checks when appropriate.
+## Credentials and local development
 
-## Consent and speech
+OpenAI credentials are loaded only by the server at runtime. Extension builds contain
+only a public backend URL and never receive the provider key. Production builds do not
+require OPENAI_API_KEY. No endpoint returns server credentials.
 
-AI controls require the popup's consent checkbox. Consent defaults off and resets when the popup closes. The worker validates a consent flag on AI messages, but it is not a durable consent record or a per-document authorization token. If the page changes while the popup remains open, the next action reads the current page under that popup's existing consent. Review the active page before each request.
-
-Speech defaults off. Manual reading and opt-in automatic reading use browser SpeechSynthesis. Disabling automatic reading cancels queued speech and is respected when an outstanding response arrives. Browser/OS voices may use a remote service; the extension does not guarantee local-only speech. Speech and screen readers may overlap if the user enables both.
-
-## API key limitations and planned handling
-
-The current local-development build reads `OPENAI_API_KEY` from ignored environment configuration and embeds it in the service worker bundle. Environment configuration and `.gitignore` prevent ordinary accidental source commits; they do not encrypt a distributed bundle. Do not share a keyed build. If a key is exposed, revoke it through its provider and replace it; deleting it from a later commit is insufficient.
-
-A future production design should move project-owned credentials to a secure server, authenticate and authorize requests, limit usage and cost, minimize payloads, and define retention and incident handling. That backend is not implemented. Logging and observability must avoid page content and credentials by default. Changing where requests go requires an updated disclosure and permission review.
+Use ignored server/.env.local for local server configuration. The legacy root .env.local
+is ignored and no longer supplies an extension key. Earlier keyed builds remain unsafe:
+remove old packages from circulation and rotate keys that were distributed or exposed.
+A secret in an environment file is safe only if it stays server-side.
+See [deployment](deployment.md) for migration and public-launch blockers.

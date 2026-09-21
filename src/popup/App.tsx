@@ -38,7 +38,7 @@ export function App() {
     if (locked.current) return;
     locked.current = true;
     setBusy(true); setError(''); setResult(null); stopSpeech();
-    setStatus(request.type === 'scan' ? 'Checking this page locally…' : 'Reading this page and asking OpenAI…');
+    setStatus(request.type === 'scan' ? 'Checking this page locally…' : 'Reading this page and asking AccessPilot AI…');
     try {
       const response: Response = await chrome.runtime.sendMessage(request);
       if (!mounted.current) return;
@@ -61,8 +61,8 @@ export function App() {
     <section aria-labelledby="page-actions">
       <h2 id="page-actions">Explore this page</h2>
       <button aria-disabled={busy} onClick={() => void run({ type: 'scan' })}>Check accessibility locally</button>
-      <p id="privacy">AI actions send the page title, up to 16,000 characters of page text, up to 40 short structure cues (such as headings and labels), and your question to OpenAI. Questions also send up to 100 interactive element names, roles, temporary IDs, and disabled states. Page text and labels may contain personal information. Form values are excluded. Local checks send nothing.</p>
-      <label className="check"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} aria-describedby="privacy" />Allow sending this page to OpenAI</label>
+      <p id="privacy">AI actions send the page title, up to 16,000 characters of page text, up to 40 short structure cues (such as headings and labels), and your question to the AccessPilot backend, which forwards them to OpenAI. Questions also send up to 100 interactive element names, roles, temporary IDs, and disabled states. Page text and labels may contain personal information. Form values are excluded. Local checks send nothing.</p>
+      <label className="check"><input type="checkbox" checked={consent} disabled={busy} onChange={event => setConsent(event.target.checked)} aria-describedby="privacy" />Allow sending this page to AccessPilot and OpenAI</label>
       <button className="primary" disabled={!consent} aria-disabled={busy || !consent} onClick={() => { if (consent) void run({ type: 'summarize', consent: true }); }}>Summarize page</button>
       <form onSubmit={ask}>
         <label htmlFor="question">Ask about this page</label>

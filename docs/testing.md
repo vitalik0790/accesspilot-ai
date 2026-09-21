@@ -4,7 +4,7 @@ Use a locally built unpacked extension and synthetic or public, non-sensitive pa
 
 ## Automated checks
 
-Run `pnpm test`, `pnpm typecheck`, and `pnpm build`. Unit tests mock Chrome and OpenAI and do not establish actual screen-reader announcements, zoom layout, voice availability, or API connectivity.
+Run `pnpm test`, `pnpm typecheck`, , `pnpm build`, and `pnpm build:server`. Unit tests mock Chrome and OpenAI and do not establish actual screen-reader announcements, zoom layout, voice availability, or API connectivity.
 
 ### Iteration validation — 2026-09-07
 
@@ -58,3 +58,18 @@ Automated validation: 53 tests across seven Vitest files passed, along with Type
 ## Before an evaluation release
 
 Do not distribute a build containing a developer-owned API key. Record unresolved issues before inviting participants, and evaluate whether summaries are useful alongside their usual screen reader. The roadmap is not a promise of current functionality.
+
+## Backend boundary iteration
+
+The suite now also covers authorization denial, Free/Pro policy, atomic in-process
+usage admission, malformed/oversized HTTP requests, safe provider errors/timeouts,
+compact request payloads, and a real extension build with a sentinel provider key.
+The HTTP test uses a real loopback server and mocked OpenAI; no paid requests are made.
+
+Before public testing, verify the installed extension's Origin against the configured
+allowlist, local summary/Q&A/focus through the server, service-offline and quota errors,
+and that local scanning/speech remain available. Repeat the NVDA, keyboard and zoom
+checks above. Production identity, replica/restart quotas, proxy logs and TLS deployment
+remain unimplemented or unverified; see deployment.md.
+
+Validation on 2026-09-20: 81 tests passed across 10 files. Production extension and server builds both passed, including strict TypeScript checks. Actual dist was scanned without displaying credentials: the configured legacy key and recognizable OpenAI keys were absent. Installed-Chrome/backend integration and assistive-technology testing remain manual.
