@@ -53,3 +53,8 @@ Thumbs.db
 Desktop.ini
 
 !/server/.env.example
+
+# Local Cloudflare state and secrets (no public secret template needed)
+.wrangler/
+.dev.vars
+.dev.vars.*

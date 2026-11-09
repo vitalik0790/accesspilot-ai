@@ -1,5 +1,10 @@
 # Development and deployment
 
+The native Cloudflare Worker is a separate deny-all entry point. Its dry-run build,
+binding configuration and verification requirements are described in
+[Cloudflare Worker](cloudflare-worker.md). The Node setup below remains local-only.
+Do not apply Node AUTH_MODE or OpenAI configuration to the Worker; neither enables it.
+
 ## Local setup (no public exposure)
 
 Requires Node.js 22+ and pnpm.

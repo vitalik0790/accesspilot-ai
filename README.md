@@ -98,6 +98,12 @@ requests and speech. Reload the extension after rebuilding.
 
 ## Architecture
 
+Milestone 1 adds a native, deny-all Cloudflare Worker alongside the existing Node
+backend. `pnpm build:worker` performs a local dry-run only; `pnpm test:worker` runs
+the Worker-runtime tests. See [Worker architecture and verification](docs/cloudflare-worker.md),
+including the current Windows runtime verification blocker. No cloud deployment,
+Supabase integration, public authentication or billing is included.
+
 ```text
 Popup → typed worker message → filtered active-page extraction
                             ├─ local accessibility checks
