@@ -1,0 +1,57 @@
+name: Verify Linux Worker
+
+on:
+  pull_request:
+  push:
+    branches: [main, feature/cloudflare-worker-adapter]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: verify-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      WRANGLER_SEND_METRICS: 'false'
+      ACCESSPILOT_BACKEND_URL: ''
+      OPENAI_API_KEY: ''
+      CLOUDFLARE_API_TOKEN: ''
+    steps:
+      - name: Check out reviewed source
+        uses: actions/checkout@1af3b93b6815bc44a9784bd300feb67ff0d1eeb3 # v6.0.0
+        with:
+          persist-credentials: false
+      - name: Set up pinned Node
+        uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
+        with:
+          node-version-file: .node-version
+          package-manager-cache: false
+      - name: Install pinned pnpm
+        run: npm install --global pnpm@11.25.0
+      - name: Scan repository before installation
+        run: node scripts/check-security.mjs
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+      - name: Run all tests (81 existing + 16 Worker runtime tests)
+        run: pnpm test
+      - name: Check TypeScript
+        run: pnpm typecheck
+      - name: Build extension
+        run: pnpm build
+      - name: Build local Node backend
+        run: pnpm build:server
+      - name: Build Worker without uploading or deploying
+        run: pnpm build:worker
+      - name: Scan repository and production artifacts
+        run: pnpm check:security --artifacts
+      - name: Check whitespace and dependency reproducibility
+        run: |
+          git diff --check
+          git diff --exit-code -- package.json pnpm-lock.yaml pnpm-workspace.yaml

@@ -13,24 +13,30 @@
     "build:local": "tsc --noEmit && vite build --mode local",
     "build:server": "tsc --noEmit && vite build --config vite.server.config.ts",
     "server:dev": "node --env-file=server/.env.local build/server/index.js",
-    "server:start": "node build/server/index.js"
+    "server:start": "node build/server/index.js",
+    "build:worker": "tsc --noEmit && wrangler deploy --dry-run --outdir build/worker",
+    "test:worker": "vitest run tests/worker.test.ts",
+    "check:security": "node scripts/check-security.mjs"
   },
   "dependencies": {
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@testing-library/jest-dom": "6.9.1",
+    "@testing-library/react": "^16.3.0",
+    "@testing-library/user-event": "^14.6.1",
     "@types/chrome": "^0.1.0",
     "@types/node": "^22.15.0",
     "@types/react": "^19.1.0",
     "@types/react-dom": "^19.1.0",
-    "@testing-library/react": "^16.3.0",
-    "@testing-library/user-event": "^14.6.1",
-    "@testing-library/jest-dom": "6.9.1",
     "@vitejs/plugin-react": "^4.4.1",
     "jsdom": "^26.1.0",
+    "miniflare": "^4.20260611.0",
     "typescript": "^5.8.3",
     "vite": "^6.3.5",
-    "vitest": "^3.2.0"
-  }
+    "vitest": "^3.2.0",
+    "wrangler": "^4.100.0"
+  },
+  "packageManager": "pnpm@11.25.0"
 }

@@ -2,6 +2,12 @@
 
 ## Status
 
+Milestone 1 now includes a native Cloudflare Worker adapter alongside the Node
+reference server. It hard-wires denied identity/usage/generation and cannot call
+OpenAI. See [Worker architecture](cloudflare-worker.md) for the new entry point,
+dry-run build and runtime-verification limitation. References to loopback listening
+below describe only the Node reference server, not the Worker security boundary.
+
 The v0.2 extension now calls an AccessPilot backend instead of OpenAI directly.
 This is a tested production boundary with a local reference server, **not a publicly
 launchable hosted service**. The default identity provider denies all requests.

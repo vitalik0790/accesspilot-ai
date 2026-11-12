@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { isAIRequest, validatedAnswer, type AIRequest, type AIResponse, type ErrorCode } from '../src/shared/api';
 import { denyIdentity, entitled, type IdentityProvider, type PlanLimits, type UsageGate } from './policy';
 import type { AIAnswer } from '../src/shared/types';
@@ -16,7 +15,7 @@ export function createApp(deps: Dependencies) {
   return {
     authenticate: (authorization?: string) => (deps.identity || denyIdentity).authenticate(authorization),
     async execute(body: unknown, identity: Awaited<ReturnType<IdentityProvider['authenticate']>>): Promise<{ status: number; body: AIResponse }> {
-      const start = Date.now(), requestId = randomUUID();
+      const start = Date.now(), requestId = crypto.randomUUID();
       let status = 503;
       try {
         if (!identity || !identity.id || !['free', 'pro'].includes(identity.plan)) throw new ServiceError('unauthorized');
